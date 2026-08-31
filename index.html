@@ -7,7 +7,11 @@
     <meta name="mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <meta name="theme-color" content="#06070a">
+    <meta name="description" content="Garde-manger connecté : stock, menu de la semaine, liste de courses et recettes.">
     <title>Mon Frigo</title>
+    <link rel="manifest" href="manifest.json">
+    <link rel="icon" href="icon-192.png" type="image/png">
+    <link rel="apple-touch-icon" href="apple-touch-icon.png">
 
     <script>
         (function () {
@@ -1382,6 +1386,20 @@
         </div>
     </div>
     <div class="card">
+        <div class="card-title"><svg class="icon icon-sm" viewBox="0 0 24 24"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/></svg> Rappels de péremption</div>
+        <p class="hint">Une notification par jour au maximum, si quelque chose périme bientôt et que l'app est ouverte — pas une alarme garantie hors-ligne.</p>
+        <div class="setting-row">
+            <div>
+                <div class="txt">Me prévenir</div>
+                <div class="sub">Demande la permission de notification à ton navigateur.</div>
+            </div>
+            <label class="switch">
+                <input type="checkbox" id="notifSwitch" onchange="basculerNotifsPeremption(this.checked)">
+                <span class="track"></span><span class="thumb"></span>
+            </label>
+        </div>
+    </div>
+    <div class="card">
         <div class="card-title"><svg class="icon icon-sm" viewBox="0 0 24 24"><path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg> Ton prénom</div>
         <p class="hint">Mon Frigo n'a pas de comptes séparés — tout le monde partage le même frigo. Ce prénom sert juste à savoir qui a ajouté quoi au menu de la semaine ; il est mémorisé sur cet appareil.</p>
         <div class="field">
@@ -1785,6 +1803,53 @@ create policy "acces menu" on menu_semaine
         return { txt: 'DLC ' + d.toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit', year: '2-digit' }), cls: '', urgent: false };
     }
 
+    /* ---- Notifications de péremption ----
+       Une seule notification par jour, seulement si l'utilisateur l'a activée
+       dans Réglages ET que la permission navigateur est accordée. Comme l'app
+       n'a pas de service worker qui tourne en tâche de fond, la notif ne peut
+       se déclencher que pendant une visite (au chargement ou à un retour sur
+       l'onglet Stock) — c'est un rappel, pas une alarme garantie hors-ligne. */
+    function notifsPeremptionActives() { return localStorage.getItem('notif_peremption') === '1'; }
+
+    function verifierNotificationsPeremption(listePerissables) {
+        if (!notifsPeremptionActives()) return;
+        if (typeof Notification === 'undefined' || Notification.permission !== 'granted') return;
+        if (!listePerissables || listePerissables.length === 0) return;
+        if (localStorage.getItem('notif_peremption_jour') === jourUTC()) return;   // deja envoyee aujourd'hui
+
+        const noms = listePerissables.slice(0, 5).map(i => i.nom);
+        const reste = listePerissables.length - noms.length;
+        const corps = noms.join(', ') + (reste > 0 ? ` et ${reste} autre${reste > 1 ? 's' : ''}` : '');
+        try {
+            new Notification('Ça périme bientôt 🧊', { body: corps, icon: 'icon-192.png', tag: 'mon-frigo-peremption' });
+            localStorage.setItem('notif_peremption_jour', jourUTC());
+        } catch (e) {}
+    }
+
+    async function basculerNotifsPeremption(actif) {
+        const input = document.getElementById('notifSwitch');
+        if (!actif) {
+            localStorage.setItem('notif_peremption', '0');
+            return;
+        }
+        if (typeof Notification === 'undefined') {
+            toast("Ce navigateur ne prend pas en charge les notifications.", 'error');
+            if (input) input.checked = false;
+            return;
+        }
+        const perm = await Notification.requestPermission();
+        if (perm !== 'granted') {
+            toast('Notifications refusées : autorise-les dans les réglages du navigateur pour activer ce rappel.', 'error');
+            if (input) input.checked = false;
+            localStorage.setItem('notif_peremption', '0');
+            return;
+        }
+        localStorage.setItem('notif_peremption', '1');
+        localStorage.removeItem('notif_peremption_jour');   // pour pouvoir tester tout de suite
+        toast('Rappels de péremption activés !');
+        afficherApp();
+    }
+
     /* ============ ICÔNES ============ */
     const IC = {
         check: '<svg class="icon icon-sm" viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></svg>',
@@ -1920,6 +1985,21 @@ create policy "acces menu" on menu_semaine
     document.getElementById('prenomInput').value = localStorage.getItem('prenom') || '';
     remplirSelectCategories(document.getElementById('categorieAliment'), null);
     chargerFavoris();
+
+    // Reflete l'etat reel : si la permission a ete revoquee depuis le navigateur
+    // (hors de l'app), on ne laisse pas le reglage mentir.
+    if (notifsPeremptionActives() && !(typeof Notification !== 'undefined' && Notification.permission === 'granted')) {
+        localStorage.setItem('notif_peremption', '0');
+    }
+    document.getElementById('notifSwitch').checked = notifsPeremptionActives();
+
+    // PWA : installe une coquille hors-ligne. Echoue silencieusement en local
+    // (file://) ou sur un navigateur qui ne le supporte pas, sans rien casser.
+    if ('serviceWorker' in navigator && location.protocol.startsWith('http')) {
+        window.addEventListener('load', () => {
+            navigator.serviceWorker.register('sw.js').catch(() => {});
+        });
+    }
     document.getElementById('fabZone').classList.add('on');   // on démarre sur le stock
     document.addEventListener('keydown', e => { if (e.key === 'Escape') fermerFab(); });
 
@@ -4169,10 +4249,12 @@ create policy "acces menu" on menu_semaine
 
         /* ---------- Statistiques ---------- */
         const alertes = inventaire.filter(i => i.qte <= i.seuil).length;
-        const perissables = inventaire.filter(i => {
+        const listePerissables = inventaire.filter(i => {
             const j = joursAvantPeremption(i);
             return j !== null && j <= SEUIL_PEREMPTION_JOURS;
-        }).length;
+        });
+        const perissables = listePerissables.length;
+        verifierNotificationsPeremption(listePerissables);
 
         // Le compteur de courses vit maintenant dans le menu flottant.
         majCompteurFab('cptCourses', alertes, true);
