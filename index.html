@@ -231,15 +231,20 @@
         .verre, .stat, .card, .item, .quota, .menu-carte, .course-menu,
         .filtre-btn, .opt, .sync-pill, .theme-toggle, .chip, .btn, .btn.ghost,
         .fab, .fab-mini .lib, .fab-mini .rond, .shop-item, .qty-input, .btn.add-ing,
-        .app-header, .sheet {
+        .sheet {
             isolation: isolate;
             position: relative;
         }
+        /* .app-header exclu de l'anneau : combiné à sa position "sticky" et à
+           son propre flou, le double flou masqué provoquait un vrai bug
+           d'affichage sur Safari/iPhone (bande figée qui se détache du reste
+           de l'en-tête au défilement) — jamais vu en test sur Chromium.
+           L'en-tête garde son flou/relief normal, juste sans l'anneau. */
         .verre::before, .stat::before, .card::before, .item::before, .quota::before,
         .menu-carte::before, .course-menu::before, .filtre-btn::before, .opt::before,
         .sync-pill::before, .theme-toggle::before, .chip::before, .btn::before,
         .btn.ghost::before, .fab::before, .fab-mini .lib::before, .fab-mini .rond::before,
-        .shop-item::before, .qty-input::before, .btn.add-ing::before, .app-header::before,
+        .shop-item::before, .qty-input::before, .btn.add-ing::before,
         .sheet::before {
             content: '';
             position: absolute; inset: 0; z-index: 0;
@@ -269,7 +274,7 @@
             .menu-carte::before, .course-menu::before, .filtre-btn::before, .opt::before,
             .sync-pill::before, .theme-toggle::before, .chip::before, .btn::before,
             .btn.ghost::before, .fab::before, .fab-mini .lib::before, .fab-mini .rond::before,
-            .shop-item::before, .qty-input::before, .btn.add-ing::before, .app-header::before,
+            .shop-item::before, .qty-input::before, .btn.add-ing::before,
             .sheet::before {
                 -webkit-backdrop-filter: none; backdrop-filter: none; border-color: transparent;
             }
@@ -307,7 +312,7 @@
         html.sans-verre .btn::before, html.sans-verre .fab::before,
         html.sans-verre .fab-mini .lib::before, html.sans-verre .fab-mini .rond::before,
         html.sans-verre .shop-item::before, html.sans-verre .qty-input::before,
-        html.sans-verre .btn.add-ing::before, html.sans-verre .app-header::before,
+        html.sans-verre .btn.add-ing::before,
         html.sans-verre .sheet::before {
             display: none;
         }
@@ -1034,7 +1039,7 @@
         .verre, .stat, .card, .item, .quota, .menu-carte, .course-menu,
         .filtre-btn, .opt, .sync-pill, .theme-toggle, .chip, .btn.ghost,
         .fab-mini .lib, .fab-mini .rond, .shop-item, .qty-input, .btn.add-ing,
-        .app-header, .sheet {
+        .sheet {
             background-image: var(--verre-sheen);
         }
         /* Boutons pleins (dégradé de marque) : le reflet vif de Mon Coach,
