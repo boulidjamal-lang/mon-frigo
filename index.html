@@ -2028,10 +2028,12 @@ create policy "acces menu" on menu_semaine
         if (btnElement) btnElement.classList.add('active');
 
         if (ongletId !== 'inventaireTab' && scannerIsRunning) fermerScanner();
-        // Le menu flottant n'a de sens que sur l'écran Stock, et ne survit pas au changement.
+        // Le menu flottant reste accessible partout : ses actions (ajout, menu,
+        // courses, recettes) ont un sens depuis n'importe quel écran. Seul le
+        // sous-menu ouvert ne survit pas au changement d'onglet.
         fermerFab();
         const zone = document.getElementById('fabZone');
-        if (zone) zone.classList.toggle('on', ongletId === 'inventaireTab');
+        if (zone) zone.classList.add('on');
 
         if (ongletId === 'recettesTab') { mettreAJourSelecteursRecettes(); majCoutRecherche(); }
         if (ongletId === 'menuTab') { majCoutMenu(); afficherMenuActif(); afficherCandidatsMenu(); }
