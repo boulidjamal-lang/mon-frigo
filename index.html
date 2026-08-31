@@ -864,6 +864,24 @@
         .pill-btn.warn { color: var(--amber); border-color: rgba(251,191,36,0.3); background: rgba(251,191,36,0.08); }
         .pill-btn.info { color: var(--sky); border-color: rgba(56,189,248,0.3); background: rgba(56,189,248,0.08); }
         .pill-btn.brand-pill { color: var(--brand-400); border-color: color-mix(in srgb, var(--brand-500) 32%, transparent); background: color-mix(in srgb, var(--brand-500) 10%, transparent); margin-left: auto; }
+        .btn.ghost.favori-on { color: var(--amber); border-color: rgba(251,191,36,0.35); }
+
+        /* ---------- Favoris ---------- */
+        .fav-liste { display: flex; gap: 10px; overflow-x: auto; padding-bottom: 4px; -webkit-overflow-scrolling: touch; }
+        .fav-carte {
+            flex: 0 0 auto; width: 132px; cursor: pointer; position: relative;
+            border-radius: 14px; overflow: hidden; background: var(--verre); border: 1px solid var(--border);
+        }
+        .fav-carte img { width: 100%; height: 88px; object-fit: cover; display: block; background: var(--input-bg-solid); }
+        .fav-titre {
+            display: block; font-size: 12px; font-weight: 700; padding: 7px 8px; line-height: 1.25;
+            color: var(--text); overflow: hidden; text-overflow: ellipsis; display: -webkit-box;
+            -webkit-line-clamp: 2; -webkit-box-orient: vertical;
+        }
+        .fav-carte .icon-btn {
+            position: absolute; top: 5px; right: 5px; background: rgba(0,0,0,0.45); color: #fff;
+            width: 26px; height: 26px; border-radius: 8px;
+        }
         .link-out { margin-left: auto; color: var(--brand-400); font-weight: 700; text-decoration: none; font-size: 13.5px; display: inline-flex; align-items: center; gap: 5px; }
 
         .drawer { display: none; margin-top: 13px; padding: 14px; border-radius: var(--r-md); background: var(--drawer-bg); border: 1px solid var(--border); }
@@ -1192,6 +1210,12 @@
         Retour au stock
     </button>
     <div class="quota-hote" data-mode="unique"></div>
+
+    <div id="recettesFavorites" style="display:none; margin-bottom:16px">
+        <h2 class="section"><svg class="icon icon-sm" viewBox="0 0 24 24" style="fill:currentColor;color:var(--amber)"><path d="M11.525 2.295a.53.53 0 0 1 .95 0l2.31 4.679a2.123 2.123 0 0 0 1.595 1.16l5.166.756a.53.53 0 0 1 .294.904l-3.736 3.638a2.123 2.123 0 0 0-.611 1.878l.882 5.14a.53.53 0 0 1-.771.56l-4.618-2.428a2.122 2.122 0 0 0-1.973 0L6.396 21.01a.53.53 0 0 1-.77-.56l.881-5.139a2.122 2.122 0 0 0-.611-1.879L2.16 9.795a.53.53 0 0 1 .294-.906l5.165-.755a2.122 2.122 0 0 0 1.597-1.16z"/></svg> Mes favoris</h2>
+        <div id="favorisListe" class="fav-liste"></div>
+    </div>
+
     <h2 class="section"><svg class="icon icon-sm" viewBox="0 0 24 24"><path d="M15 11h.01"/><path d="M11 15h.01"/><path d="M16 16h.01"/><path d="m2 16 20 6-6-20A20 20 0 0 0 2 16"/><path d="M5.71 17.11a17.04 17.04 0 0 1 11.4-11.4"/></svg> Idées recettes</h2>
     <div class="card">
         <p class="hint">Choisis les ingrédients de ton stock à cuisiner en priorité. Pour planifier plusieurs repas, ouvre « Menu de la semaine » depuis le bouton + de l'accueil.</p>
@@ -1466,6 +1490,16 @@ create policy "acces menu" on menu_semaine
             </button>
         </div>
     </div>
+    <div class="card">
+        <div class="card-title"><svg class="icon icon-sm" viewBox="0 0 24 24"><path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M5 21h14"/></svg> Sauvegarde du stock</div>
+        <p class="hint">Télécharge une copie de ton stock actuel (fichier CSV, ouvrable dans un tableur). Un filet de sécurité en plus de la synchronisation Supabase.</p>
+        <div class="field">
+            <button class="btn ghost" onclick="exporterStock()">
+                <svg class="icon" viewBox="0 0 24 24"><path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M5 21h14"/></svg>
+                Exporter mon stock (CSV)
+            </button>
+        </div>
+    </div>
 </div>
 
 <!-- Bouton flottant : un appui déplie les quatre destinations de l'app.
@@ -1532,6 +1566,7 @@ create policy "acces menu" on menu_semaine
     let ajoutOuvert = false;       // la feuille d'ajout est affichee
     let retourVersAjout = false;   // on a quitte la feuille pour scanner, il faut y revenir
     let ingredientsChoisis = [''];       // une ligne vide au depart
+    let perissablesPreselectionnes = false;  // pre-remplissage auto, une seule fois par session
     const MAX_INGREDIENTS = 5;           // au-dela, Spoonacular ne renvoie presque plus rien
     // Declarees ici et pas plus bas : le bloc INIT lit le quota avant d'atteindre
     // la section Spoonacular, et un const non encore initialise leverait une ReferenceError.
@@ -1597,6 +1632,7 @@ create policy "acces menu" on menu_semaine
     let toutesLesRecettes = [];
     let pageActuelle = 1;
     const recettesParPage = 10;
+    let recettesFavorites = {};   // { [id]: recette allegee }, memorise sur cet appareil
 
     /* --- Anti-gaspillage de credits Spoonacular --- */
     let rechercheEnCours = false;              // verrou anti double-clic / double-requete
@@ -1768,7 +1804,9 @@ create policy "acces menu" on menu_semaine
         right: '<svg class="icon" viewBox="0 0 24 24"><path d="m9 18 6-6-6-6"/></svg>',
         clock: '<svg class="icon icon-sm" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>',
         plus: '<svg class="icon icon-sm" viewBox="0 0 24 24"><path d="M5 12h14"/><path d="M12 5v14"/></svg>',
-        moins: '<svg class="icon icon-sm" viewBox="0 0 24 24"><path d="M5 12h14"/></svg>'
+        moins: '<svg class="icon icon-sm" viewBox="0 0 24 24"><path d="M5 12h14"/></svg>',
+        star: '<svg class="icon icon-sm" viewBox="0 0 24 24"><path d="M11.525 2.295a.53.53 0 0 1 .95 0l2.31 4.679a2.123 2.123 0 0 0 1.595 1.16l5.166.756a.53.53 0 0 1 .294.904l-3.736 3.638a2.123 2.123 0 0 0-.611 1.878l.882 5.14a.53.53 0 0 1-.771.56l-4.618-2.428a2.122 2.122 0 0 0-1.973 0L6.396 21.01a.53.53 0 0 1-.77-.56l.881-5.139a2.122 2.122 0 0 0-.611-1.879L2.16 9.795a.53.53 0 0 1 .294-.906l5.165-.755a2.122 2.122 0 0 0 1.597-1.16z"/></svg>',
+        starFill: '<svg class="icon icon-sm" viewBox="0 0 24 24" style="fill:currentColor"><path d="M11.525 2.295a.53.53 0 0 1 .95 0l2.31 4.679a2.123 2.123 0 0 0 1.595 1.16l5.166.756a.53.53 0 0 1 .294.904l-3.736 3.638a2.123 2.123 0 0 0-.611 1.878l.882 5.14a.53.53 0 0 1-.771.56l-4.618-2.428a2.122 2.122 0 0 0-1.973 0L6.396 21.01a.53.53 0 0 1-.77-.56l.881-5.139a2.122 2.122 0 0 0-.611-1.879L2.16 9.795a.53.53 0 0 1 .294-.906l5.165-.755a2.122 2.122 0 0 0 1.597-1.16z"/></svg>'
     };
 
     /* ============ TOASTS ============ */
@@ -1881,6 +1919,7 @@ create policy "acces menu" on menu_semaine
     document.getElementById('apiKeyInput').value = localStorage.getItem('spoonacular_key') || '';
     document.getElementById('prenomInput').value = localStorage.getItem('prenom') || '';
     remplirSelectCategories(document.getElementById('categorieAliment'), null);
+    chargerFavoris();
     document.getElementById('fabZone').classList.add('on');   // on démarre sur le stock
     document.addEventListener('keydown', e => { if (e.key === 'Escape') fermerFab(); });
 
@@ -1942,6 +1981,33 @@ create policy "acces menu" on menu_semaine
         localStorage.setItem('supabase_key', key);
         toast('Configuration enregistrée !');
         setTimeout(() => location.reload(), 700);
+    }
+
+    /* ============ EXPORT ============ */
+    function exporterStock() {
+        if (inventaire.length === 0) return toast('Ton stock est vide, rien à exporter.', 'info');
+
+        const colonnes = ['nom', 'categorie', 'qte', 'unite', 'seuil', 'lieu', 'date_peremption'];
+        const entetes = ['Nom', 'Catégorie', 'Quantité', 'Unité', 'Seuil', 'Lieu', 'Péremption'];
+        const echapper = v => {
+            const s = (v === null || v === undefined) ? '' : String(v);
+            return /[",;\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
+        };
+        const lignes = [entetes.join(';')].concat(
+            inventaire.map(i => colonnes.map(c => echapper(i[c])).join(';'))
+        );
+        // BOM en tête : Excel détecte l'UTF-8 et n'affiche pas les accents en charabia.
+        const csv = '﻿' + lignes.join('\r\n');
+        const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `mon-frigo-${jourUTC()}.csv`;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        setTimeout(() => URL.revokeObjectURL(url), 2000);
+        toast(`Stock exporté (${inventaire.length} article${inventaire.length > 1 ? 's' : ''}).`);
     }
 
     function sauvegarderCleAPI() {
@@ -2035,7 +2101,7 @@ create policy "acces menu" on menu_semaine
         const zone = document.getElementById('fabZone');
         if (zone) zone.classList.add('on');
 
-        if (ongletId === 'recettesTab') { mettreAJourSelecteursRecettes(); majCoutRecherche(); }
+        if (ongletId === 'recettesTab') { preselectionnerPerissables(); mettreAJourSelecteursRecettes(); majCoutRecherche(); afficherFavoris(); }
         if (ongletId === 'menuTab') { majCoutMenu(); afficherMenuActif(); afficherCandidatsMenu(); }
         window.scrollTo({ top: 0, behavior: 'smooth' });
     }
@@ -3522,9 +3588,74 @@ create policy "acces menu" on menu_semaine
         await chargerMenu();
     }
 
+    /* ---- Recettes favorites (memorisees sur cet appareil, comme le prenom) ---- */
+    function chargerFavoris() {
+        try { recettesFavorites = JSON.parse(localStorage.getItem('recettes_favorites') || '{}'); }
+        catch (e) { recettesFavorites = {}; }
+    }
+    function sauvegarderFavoris() {
+        try { localStorage.setItem('recettes_favorites', JSON.stringify(recettesFavorites)); } catch (e) {}
+    }
+    function estFavori(id) { return Object.prototype.hasOwnProperty.call(recettesFavorites, id); }
+
+    function basculerFavori(id, source) {
+        id = Number(id);
+        if (estFavori(id)) {
+            delete recettesFavorites[id];
+            sauvegarderFavoris();
+            toast('Retiré des favoris.', 'info');
+        } else {
+            const r = source === 'favori' ? recettesFavorites[id] : toutesLesRecettes.find(x => x.id == id);
+            if (!r) return;
+            // Copie allegee : juste de quoi rafficher la fiche sans redemander l'API.
+            recettesFavorites[id] = {
+                id: r.id,
+                titre: r.titre || r.title,
+                titreFr: r.titreFr || null,
+                image: r.image || null,
+                minutes: r.minutes || null,
+                portions: r.portions || null,
+                nutrition: r.nutrition || {},
+                lien: r.lien || `https://spoonacular.com/recipes/-${r.id}`,
+                ingredients: r.ingredients || [],
+                ingredientsFr: r.ingredientsFr || null,
+                etapes: r.etapes || [],
+                etapesFr: r.etapesFr || null,
+            };
+            sauvegarderFavoris();
+            toast('Ajouté aux favoris !');
+        }
+        afficherPageRecettes();
+        afficherFavoris();
+        majBoutonFavori(id);
+    }
+
+    function majBoutonFavori(id) {
+        const btn = document.getElementById('btnFavori');
+        if (!btn || Number(btn.dataset.id) !== Number(id)) return;
+        const on = estFavori(id);
+        btn.classList.toggle('favori-on', on);
+        btn.innerHTML = (on ? IC.starFill : IC.star) + (on ? ' Favori' : ' Ajouter aux favoris');
+    }
+
+    function afficherFavoris() {
+        const wrap = document.getElementById('recettesFavorites');
+        if (!wrap) return;
+        const favoris = Object.values(recettesFavorites);
+        if (favoris.length === 0) { wrap.style.display = 'none'; return; }
+        wrap.style.display = '';
+        document.getElementById('favorisListe').innerHTML = favoris.map(r => `
+            <div class="fav-carte" onclick="ouvrirFicheRecette(${r.id},'favori')">
+                <img src="${escapeHtml(r.image || '')}" alt="" loading="lazy" onerror="imgFallback(this)">
+                <span class="fav-titre">${escapeHtml(r.titreFr || r.titre)}</span>
+                <button class="icon-btn danger" title="Retirer des favoris" onclick="event.stopPropagation(); basculerFavori(${r.id},'favori')">${IC.trash}</button>
+            </div>`).join('');
+    }
+
     /* ---- Fiche détaillée d'une recette ---- */
     function trouverRecette(id, source) {
         if (source === 'menu') return menuSemaine.find(m => m.recette_id == id);
+        if (source === 'favori') return recettesFavorites[id] || null;
         if (source === 'stock') {
             const r = toutesLesRecettes.find(x => x.id == id);
             // La nutrition n'est chargee qu'a la demande : on la reprend si elle existe deja.
@@ -3570,6 +3701,10 @@ create policy "acces menu" on menu_semaine
                        style="text-decoration:none">${IC.arrow} Voir la source</a>
                 </div>
                 <div class="sheet-actions">
+                    ${(source === 'stock' || source === 'favori') ? `
+                    <button class="btn ghost ${estFavori(r.id) ? 'favori-on' : ''}" id="btnFavori" data-id="${r.id}" onclick="basculerFavori(${r.id},'${source}')">
+                        ${estFavori(r.id) ? IC.starFill : IC.star} ${estFavori(r.id) ? 'Favori' : 'Ajouter aux favoris'}
+                    </button>` : ''}
                     <button class="btn ghost" id="recFermer">Fermer</button>
                 </div>
             </div>`;
@@ -3604,6 +3739,7 @@ create policy "acces menu" on menu_semaine
         r.titreFr = titre;
         r.etapesFr = etapes;
         r.ingredientsFr = ing;
+        if (source === 'favori') sauvegarderFavoris();
 
         // L'utilisateur a pu fermer ou ouvrir autre chose entre-temps.
         const ov = document.getElementById('overlay');
@@ -3978,6 +4114,28 @@ create policy "acces menu" on menu_semaine
             ? `Maximum ${MAX_INGREDIENTS} ingrédients : au-delà, presque aucune recette ne correspond.`
             : (trouEnCours ? "Choisis d'abord l'ingrédient de la ligne vide."
                            : (restants <= 0 ? 'Tout ton stock est déjà sélectionné.' : ''));
+    }
+
+    // Pré-sélectionne les aliments bientôt périmés au premier passage sur l'onglet
+    // Recettes : évite le gaspillage sans y penser. Ne touche jamais un choix déjà
+    // fait par l'utilisateur, et ne joue qu'une fois par session.
+    function preselectionnerPerissables() {
+        if (perissablesPreselectionnes) return;
+        perissablesPreselectionnes = true;
+        if (ingredientsChoisis.some(v => v !== '')) return;
+        if (!supportePeremption) return;
+
+        const dispo = inventaire.filter(i => i.qte > 0 && estAlimentaire(i));
+        const perissables = dispo
+            .map(i => ({ nom: i.nom, j: joursAvantPeremption(i) }))
+            .filter(x => x.j !== null && x.j <= SEUIL_PEREMPTION_JOURS)
+            .sort((a, b) => a.j - b.j)
+            .slice(0, MAX_INGREDIENTS)
+            .map(x => x.nom);
+
+        if (perissables.length === 0) return;
+        ingredientsChoisis = perissables;
+        toast(`${perissables.length} aliment${perissables.length > 1 ? 's' : ''} bientôt périmé${perissables.length > 1 ? 's' : ''} présélectionné${perissables.length > 1 ? 's' : ''}.`, 'info');
     }
 
     function majIngredient(idx, valeur) {
@@ -4750,6 +4908,7 @@ create policy "acces menu" on menu_semaine
                         <div class="recipe-tools">
                             <button class="pill-btn warn" onclick="togglePopupManquants(${recipe.id})">${IC.list} Ingrédients</button>
                             <button class="pill-btn info" onclick="chargerNutrition(${recipe.id})">${IC.chart} Nutrition</button>
+                            <button class="pill-btn ${estFavori(recipe.id) ? 'warn' : ''}" onclick="basculerFavori(${recipe.id},'stock')">${estFavori(recipe.id) ? IC.starFill : IC.star} ${estFavori(recipe.id) ? 'Favori' : 'Favoriser'}</button>
                             <button class="pill-btn brand-pill" onclick="ouvrirFicheRecette(${recipe.id},'stock')">${IC.list} Voir la recette</button>
                         </div>
                         <div class="drawer" id="missing-box-${recipe.id}">
